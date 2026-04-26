@@ -1,0 +1,7 @@
+{
+  "location": "Port of Rotterdam, Netherlands",
+  "disruption_level": 0.95,
+  "reason": "Sudden unannounced wildcat strike by crane operators halting 90% of container movement.",
+  "affected_routes": ["Asia-Europe Westbound", "Trans-Atlantic Eastbound"],
+  "timestamp": "2026-04-26T09:00:00Z"
+}

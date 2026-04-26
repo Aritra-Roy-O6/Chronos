@@ -6,11 +6,13 @@ import { fileURLToPath } from 'url';
 import { db, FieldValue } from './config/firebase.js'; 
 import { runReflexionLoop } from './services/orchestrator.service.js';
 import { executePlan } from './services/executor.service.js';
+import cors from 'cors';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(cors());
 app.use(express.json());
 
 // ==========================================

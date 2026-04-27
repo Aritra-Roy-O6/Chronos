@@ -127,9 +127,11 @@ export default function GlobeView({ onStateChange, historicalFocus }) {
     <div className="absolute inset-0 cursor-move">
       <Globe
         ref={globeEl}
-        globeImageUrl="//unpkg.com/three-globe/example/img/earth-dark.jpg"
+        globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
         bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-        backgroundColor="#0a0a0a"
+        backgroundColor="#020914"
+        atmosphereColor="#1e4d62"
+        atmosphereAltitude={0.12}
         
         // Render Points
         htmlElementsData={allPoints}
@@ -137,14 +139,18 @@ export default function GlobeView({ onStateChange, historicalFocus }) {
         htmlLng="lng"
         htmlElement={(d) => {
           const el = document.createElement('div');
-          const pulseCss = d.isHistorical ? '' : 'animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;';
+          const pulseCss = d.isHistorical || d.isCity ? '' : 'animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;';
+          const ringSize = d.isCity ? 18 : 32;
+          const dotSize = d.isCity ? 8 : 12;
+          const label = d.isCity ? d.label : d.label;
+          const labelOpacity = d.isCity ? '0.65' : '1';
           
           el.innerHTML = `
             <div style="position: relative; display: flex; align-items: center; justify-content: center; pointer-events: none;">
-              <div style="position: absolute; width: 32px; height: 32px; background-color: ${d.color}; border-radius: 50%; opacity: 0.5; ${pulseCss}"></div>
-              <div style="position: relative; width: 12px; height: 12px; background-color: ${d.color}; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 15px ${d.color};"></div>
-              <div style="position: absolute; top: 20px; padding: 4px 8px; background: rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.2); color: white; font-size: 10px; font-family: monospace; border-radius: 4px; white-space: nowrap;">
-                ${d.label}
+              <div style="position: absolute; width: ${ringSize}px; height: ${ringSize}px; background-color: ${d.color}; border-radius: 50%; opacity: 0.35; ${pulseCss}"></div>
+              <div style="position: relative; width: ${dotSize}px; height: ${dotSize}px; background-color: ${d.color}; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 15px ${d.color};"></div>
+              <div style="position: absolute; top: 22px; padding: 3px 6px; background: rgba(2, 15, 26, 0.85); border: 1px solid rgba(255,255,255,0.12); color: white; font-size: ${d.isCity ? 9 : 10}px; font-family: monospace; border-radius: 4px; white-space: nowrap; opacity: ${labelOpacity};">
+                ${label}
               </div>
             </div>
           `;

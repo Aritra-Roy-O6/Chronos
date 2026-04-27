@@ -23,6 +23,7 @@ export async function executePlan(planData, worldStateId) {
     // Update Firestore to show actions are complete
     await db.collection('world_state').doc(worldStateId).update({
         execution_status: 'EXECUTED',
+        isActive: false,
         contract_draft: contract,
         alert_sent: true,
         executedAt: FieldValue.serverTimestamp()

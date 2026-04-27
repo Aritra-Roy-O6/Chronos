@@ -15,9 +15,22 @@ const plannerSchema = {
             path_description: { type: Type.STRING, description: "Step-by-step path (e.g., 'Rotterdam -> Rail to Genoa -> Sea to Asia')" },
             estimated_days: { type: Type.NUMBER, description: "Total transit time in days" },
             cost_usd: { type: Type.NUMBER, description: "Estimated cost in USD" },
-            carbon_kg: { type: Type.NUMBER, description: "Estimated carbon footprint in KG" }
+            carbon_kg: { type: Type.NUMBER, description: "Estimated carbon footprint in KG" },
+            // 🌟 NEW: Force the AI to plot the coordinates!
+            waypoints: {
+                type: Type.ARRAY,
+                description: "List of 4 to 6 rough [lat, lng] coordinates tracing the route geographically.",
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        lat: { type: Type.NUMBER },
+                        lng: { type: Type.NUMBER }
+                    },
+                    required: ["lat", "lng"]
+                }
+            }
         },
-        required: ["route_id", "path_description", "estimated_days", "cost_usd", "carbon_kg"]
+        required: ["route_id", "path_description", "estimated_days", "cost_usd", "carbon_kg", "waypoints"]
     }
 };
 

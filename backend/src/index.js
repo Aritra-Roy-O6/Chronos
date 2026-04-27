@@ -7,6 +7,7 @@ import { db, FieldValue } from './config/firebase.js';
 import { runReflexionLoop } from './services/orchestrator.service.js';
 import { executePlan } from './services/executor.service.js';
 import cors from 'cors';
+import { calculatePriority } from './services/priority.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -52,11 +53,15 @@ app.post('/api/demo/trigger', async (req, res) => {
         const filePath = path.join(__dirname, 'data', 'rotterdam_strike.json');
         const demoData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
         
+        // 🌟 NEW: Calculate Priority before saving
+        const impactAnalysis = await calculatePriority(demoData);
+
         const statePayload = {
             ...demoData,
+            ...impactAnalysis, // Adds priority_score and priority_reason
             createdAt: FieldValue.serverTimestamp(),
             isActive: true,
-            status: "NEW" // Explicitly mark as NEW for the listener
+            status: "NEW" 
         };
 
         const docRef = await db.collection('world_state').add(statePayload);
@@ -66,16 +71,33 @@ app.post('/api/demo/trigger', async (req, res) => {
     }
 });
 
+// 3. The Approval Endpoint (Now with Human-In-The-Loop Overwrites)
 app.post('/api/plan/approve', async (req, res) => {
-    const { worldStateId } = req.body;
-    console.log(`\n👨‍💼 [HUMAN] Plan for ${worldStateId} approved. Triggering Executor...`);
+    const { worldStateId, overwriteData } = req.body;
+    console.log(`\n👨‍💼 [HUMAN] Plan for ${worldStateId} approved.`);
     
     try {
         const doc = await db.collection('world_state').doc(worldStateId).get();
-        const planData = doc.data().validated_plan;
+        let planData = doc.data().validated_plan;
+
+        // 🌟 NEW: Check if the human changed the AI's math or route
+        if (overwriteData && overwriteData.isEdited) {
+            console.log(`[SECURITY] Human overwrite detected! Logging audit trail...`);
+            
+            await db.collection('agent_logs').add({
+                worldStateId,
+                iteration: 99,
+                type: 'HUMAN_OVERWRITE',
+                diff: `Human override applied. Reason: ${overwriteData.editReason}`,
+                timestamp: FieldValue.serverTimestamp()
+            });
+
+            // Apply modifications
+            if (overwriteData.estimated_days) planData.route.estimated_days = overwriteData.estimated_days;
+            if (overwriteData.route_path) planData.route.path_description = overwriteData.route_path; // ✅ Added Route Editing
+        }
 
         await executePlan(planData, worldStateId);
-
         res.status(200).json({ message: "Plan executed successfully" });
     } catch (error) {
         res.status(500).json({ error: "Execution failed" });

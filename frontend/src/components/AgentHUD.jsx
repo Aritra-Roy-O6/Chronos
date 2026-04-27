@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Terminal, BrainCircuit, Activity } from 'lucide-react';
+import { Terminal, BrainCircuit, Activity, ShieldCheck } from 'lucide-react';
 
 export default function AgentHUD({ activeStateId }) {
   const [logs, setLogs] = useState([]);
@@ -69,6 +69,18 @@ export default function AgentHUD({ activeStateId }) {
                 <BrainCircuit className="w-3 h-3 mt-0.5 shrink-0" />
                 <span><strong className="text-white/80">PLANNER:</strong> Generated {log.routes?.length || 0} candidate routes.</span>
               </div>
+
+              {/* 🌟 NEW: Render Human Overwrites */}
+              {log.type === 'HUMAN_OVERWRITE' && (
+                  <div className="text-blue-400 flex items-start gap-2 mt-2 bg-blue-500/10 p-2 rounded border border-blue-500/20">
+                    <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                        <strong className="text-white">HUMAN OVERRIDE:</strong>
+                        <br/>
+                        <span className="text-white/80">{log.diff}</span>
+                    </div>
+                  </div>
+              )}
               
               {log.evaluations?.map((evalItem, idx) => (
                 <div key={idx} className="pl-5 text-amber-400/90 flex flex-col">

@@ -26,6 +26,8 @@ const metrics = [
   { value: 'Sea / Rail / Road', label: 'multimodal rerouting' }
 ];
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export default function LandingPage() {
   const [apiKey, setApiKey] = useState(() => getStoredGeminiApiKey());
   const [status, setStatus] = useState({ type: '', message: '' });
@@ -54,7 +56,7 @@ export default function LandingPage() {
       const credential = await signInAnonymously(auth);
       const idToken = await credential.user.getIdToken();
 
-      const response = await fetch('http://localhost:3000/api/config/gemini-key', {
+      const response = await fetch(`${API_BASE_URL}/api/config/gemini-key`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

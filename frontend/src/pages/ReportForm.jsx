@@ -10,6 +10,8 @@ const PORTS = [
   "Port of Hamburg, Germany"
 ];
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export default function ReportForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -27,7 +29,7 @@ export default function ReportForm() {
 
     try {
       // 🌟 NEW: Send to our secure backend API instead of Firebase directly
-      const response = await fetch('http://localhost:3000/api/report', {
+      const response = await fetch(`${API_BASE_URL}/api/report`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

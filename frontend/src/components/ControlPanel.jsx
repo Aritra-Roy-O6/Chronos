@@ -6,6 +6,7 @@ import { ShieldCheck, Wind, Map, Trash2, Plus } from 'lucide-react';
 export default function ControlPanel({ activeState }) {
   const navigate = useNavigate();
   const [isDeleting, setIsDeleting] = useState(false);
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
   if (!activeState) return null;
   const route = activeState.validated_plan?.route;
@@ -18,7 +19,7 @@ export default function ControlPanel({ activeState }) {
       if (!activeState?.id) return;
       setIsDeleting(true);
       try {
-          await fetch('http://localhost:3000/api/route/delete', {
+          await fetch(`${API_BASE_URL}/api/route/delete`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ worldStateId: activeState.id })

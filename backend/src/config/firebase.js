@@ -1,4 +1,5 @@
 import { initializeApp, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import fs from 'fs';
 import path from 'path';
@@ -21,7 +22,8 @@ initializeApp({
 });
 
 const db = getFirestore();
+const adminAuth = getAuth();
 
 console.log("✅ Firebase Admin initialized successfully.");
 
-export { db, FieldValue };
+export { db, FieldValue, adminAuth };

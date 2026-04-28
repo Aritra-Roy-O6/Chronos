@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
-import { db, FieldValue } from './config/firebase.js'; 
+import { db, FieldValue, adminAuth } from './config/firebase.js'; 
 import { runReflexionLoop, initializeRoutePlanningForShipment } from './services/orchestrator.service.js';
 import cors from 'cors';
 import { calculatePriority } from './services/priority.service.js';
@@ -21,7 +21,24 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-app.post('/api/config/gemini-key', async (req, res) => {
+async function requireFirebaseAuth(req, res, next) {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null;
+
+    if (!token) {
+        return res.status(401).json({ error: 'Missing Firebase auth token.' });
+    }
+
+    try {
+        req.user = await adminAuth.verifyIdToken(token);
+        next();
+    } catch (error) {
+        console.error('[AUTH] Firebase token verification failed:', error);
+        return res.status(401).json({ error: 'Invalid Firebase auth token.' });
+    }
+}
+
+app.post('/api/config/gemini-key', requireFirebaseAuth, async (req, res) => {
     const { apiKey } = req.body;
 
     try {

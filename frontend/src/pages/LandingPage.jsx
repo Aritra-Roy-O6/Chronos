@@ -1,21 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { signInAnonymously } from 'firebase/auth';
+import { auth } from '../firebase';
+import { getStoredGeminiApiKey, setStoredGeminiApiKey } from '../utils/apiKeyStorage';
 import './LandingPage.css';
-
-const API_KEY_COOKIE = 'chronos_gemini_api_key';
-
-function readCookie(name) {
-  const prefix = `${name}=`;
-  return document.cookie
-    .split(';')
-    .map((entry) => entry.trim())
-    .find((entry) => entry.startsWith(prefix))
-    ?.slice(prefix.length) || '';
-}
-
-function writeCookie(name, value) {
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-}
 
 const capabilities = [
   {
@@ -39,9 +27,16 @@ const metrics = [
 ];
 
 export default function LandingPage() {
-  const [apiKey, setApiKey] = useState(() => decodeURIComponent(readCookie(API_KEY_COOKIE) || ''));
+  const [apiKey, setApiKey] = useState(() => getStoredGeminiApiKey());
   const [status, setStatus] = useState({ type: '', message: '' });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (window.location.hash === '#api-key-section') {
+      const section = document.getElementById('api-key-section');
+      section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
 
   async function handleSaveApiKey(event) {
     event.preventDefault();
@@ -54,11 +49,17 @@ export default function LandingPage() {
         throw new Error('Enter a Gemini API key before saving.');
       }
 
-      writeCookie(API_KEY_COOKIE, trimmed);
+      setStoredGeminiApiKey(trimmed);
+
+      const credential = await signInAnonymously(auth);
+      const idToken = await credential.user.getIdToken();
 
       const response = await fetch('http://localhost:3000/api/config/gemini-key', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`
+        },
         body: JSON.stringify({ apiKey: trimmed })
       });
 
@@ -77,6 +78,8 @@ export default function LandingPage() {
 
   return (
     <main className="landing-page">
+
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section className="landing-hero">
         <div className="landing-shell">
           <header className="landing-nav">
@@ -87,13 +90,14 @@ export default function LandingPage() {
               <Link to="/command">Command Center</Link>
               <Link to="/create">Create Shipment</Link>
               <Link to="/report">Report Incident</Link>
+              <a href="#api-key-section">Add Your Own Gemini API Key</a>
             </nav>
           </header>
 
           <div className="landing-hero-grid">
             <div className="landing-copy">
               <p className="landing-eyebrow">Proactive Logistics Intelligence</p>
-              <h1>Self-healing shipment protection for a volatile world.</h1>
+              <h1>Self-healing shipment <em>protection</em></h1>
               <p className="landing-subcopy">
                 CHRONOS watches every active route, detects disruption signals before cargo hits the bottleneck, and
                 reroutes around risk with time and carbon performance built into every decision.
@@ -142,11 +146,14 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Capabilities ─────────────────────────────────────────────────── */}
       <section className="landing-section">
         <div className="landing-shell">
           <div className="landing-section-heading">
-            <p className="landing-eyebrow">Why Teams Use CHRONOS</p>
-            <h2>Designed for operators who cannot afford reactive logistics.</h2>
+            <div>
+              <p className="landing-eyebrow">Why Teams Use CHRONOS</p>
+              <h2>Designed for operators who cannot afford reactive logistics.</h2>
+            </div>
           </div>
           <div className="landing-capability-grid">
             {capabilities.map((capability) => (
@@ -159,14 +166,15 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="landing-section">
+      {/* ── API Key ───────────────────────────────────────────────────────── */}
+      <section className="landing-section" id="api-key-section">
         <div className="landing-shell">
           <div className="landing-api-card">
             <div className="landing-api-copy">
               <p className="landing-eyebrow">Runtime LLM Access</p>
               <h2>Update the Gemini key without touching deployment config.</h2>
               <p>
-                Save a fresh Gemini API key here when the old one expires. CHRONOS stores it locally in a cookie for
+                Save a fresh Gemini API key here when the old one expires. CHRONOS stores it in localStorage for
                 convenience and syncs it to backend runtime config so new planning, critic, watchman, and priority calls use it.
               </p>
             </div>
@@ -185,7 +193,7 @@ export default function LandingPage() {
                 className="landing-api-input"
               />
               <button type="submit" disabled={saving} className="landing-button landing-button-primary landing-api-button">
-                {saving ? 'Saving...' : 'Save API Key'}
+                {saving ? 'Saving…' : 'Save API Key'}
               </button>
               {status.message && (
                 <p className={`landing-api-status ${status.type === 'error' ? 'landing-api-status-error' : 'landing-api-status-success'}`}>
@@ -197,26 +205,30 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── CTA ──────────────────────────────────────────────────────────── */}
       <section className="landing-section landing-section-accent">
-        <div className="landing-shell landing-cta">
-          <div>
-            <p className="landing-eyebrow">Public Sensor Network</p>
-            <h2>See a disruption first? Feed the network immediately.</h2>
-            <p>
-              The reporting endpoint is built for drivers, port teams, and local operators who can provide real ground truth
-              before the news cycle catches up.
-            </p>
-          </div>
-          <div className="landing-cta-actions">
-            <Link to="/report" className="landing-button landing-button-primary">
-              Open Report Endpoint
-            </Link>
-            <Link to="/command" className="landing-button landing-button-tertiary">
-              View Command Center
-            </Link>
+        <div className="landing-shell">
+          <div className="landing-cta">
+            <div>
+              <p className="landing-eyebrow">Public Sensor Network</p>
+              <h2>See a disruption first? Feed the network immediately.</h2>
+              <p>
+                The reporting endpoint is built for drivers, port teams, and local operators who can provide real ground truth
+                before the news cycle catches up.
+              </p>
+            </div>
+            <div className="landing-cta-actions">
+              <Link to="/report" className="landing-button landing-button-primary">
+                Open Report Endpoint
+              </Link>
+              <Link to="/command" className="landing-button landing-button-tertiary">
+                View Command Center
+              </Link>
+            </div>
           </div>
         </div>
       </section>
+
     </main>
   );
 }

@@ -5,6 +5,7 @@ import ReportForm from './pages/ReportForm';
 import TrackingPage from './pages/TrackingPage';
 import NewShipment from './pages/NewShipment';
 import LandingPage from './pages/LandingPage';
+import { hasStoredGeminiApiKey } from './utils/apiKeyStorage';
 
 const LAST_ROUTE_COOKIE = 'chronos_last_route';
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
@@ -51,14 +52,43 @@ function RoutePersistence() {
   return null;
 }
 
+function RequireLocalApiKey({ children }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const hasAlertedRef = useRef(false);
+
+  useEffect(() => {
+    if (hasStoredGeminiApiKey()) {
+      hasAlertedRef.current = false;
+      return;
+    }
+
+    if (!hasAlertedRef.current) {
+      window.alert('Add your Gemini API key before opening the dashboard or creating routes.');
+      hasAlertedRef.current = true;
+    }
+
+    navigate('/#api-key-section', {
+      replace: true,
+      state: { from: `${location.pathname}${location.search}${location.hash}` }
+    });
+  }, [location.hash, location.pathname, location.search, navigate]);
+
+  if (!hasStoredGeminiApiKey()) {
+    return null;
+  }
+
+  return children;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <RoutePersistence />
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/command" element={<CommandCenter />} />
-        <Route path="/create" element={<NewShipment />} />
+        <Route path="/command" element={<RequireLocalApiKey><CommandCenter /></RequireLocalApiKey>} />
+        <Route path="/create" element={<RequireLocalApiKey><NewShipment /></RequireLocalApiKey>} />
         <Route path="/report" element={<ReportForm />} />
         <Route path="/track/:id" element={<TrackingPage />} />
       </Routes>

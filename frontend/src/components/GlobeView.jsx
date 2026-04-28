@@ -65,7 +65,7 @@ export default function GlobeView({ onStateChange, historicalFocus }) {
                           startLng: wps[i].lng,
                           endLat: wps[i+1].lat,
                           endLng: wps[i+1].lng,
-                          color: ['#10b981', '#3b82f6'],
+                          color: ['#facc15', '#fde047'],
                           name: `seg-${i}`
                       });
                   }
@@ -114,7 +114,7 @@ export default function GlobeView({ onStateChange, historicalFocus }) {
                         startLng: wps[i].lng,
                         endLat: wps[i+1].lat,
                         endLng: wps[i+1].lng,
-                        color: ['#10b981', '#3b82f6'],
+                        color: ['#facc15', '#fde047'],
                         name: `hist-seg-${i}`
                     });
                  }

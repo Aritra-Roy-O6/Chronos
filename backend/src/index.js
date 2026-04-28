@@ -9,7 +9,7 @@ import { runReflexionLoop, initializeRoutePlanningForShipment } from './services
 import cors from 'cors';
 import { calculatePriority } from './services/priority.service.js';
 import { getCoordinates } from './services/geocoder.service.js';
-import { createDisturbance, cleanExpiredDisturbances } from './services/disturbance.service.js';
+import { createDisturbance, cleanExpiredDisturbances, scanActiveDisturbancesForRoutes } from './services/disturbance.service.js';
 import { scanShipmentForThreats } from './services/watchman.service.js';
 
 
@@ -100,12 +100,24 @@ app.post('/api/report', async (req, res) => {
             reason,
             severity: normalizedSeverity,
             duration_hours: normalizedDuration,
-            source: 'PUBLIC_SENTINEL'
+            source: 'PUBLIC_SENTINEL',
+            triggerReroute: false
         });
-        res.status(200).json({ success: true, message: "Disruption report ingested. CHRONOS will reroute affected shipments automatically." });
+        res.status(200).json({ success: true, message: "Disruption report saved. CHRONOS will include it in the next monitoring sweep." });
     } catch (error) {
         console.error("[PUBLIC SENTINEL] Report ingestion failed:", error);
         res.status(500).json({ error: "Execution failed" });
+    }
+});
+
+// Sweep stored disturbances every 5 minutes and reroute only if a report actually intersects an active route.
+cron.schedule('*/5 * * * *', async () => {
+    console.log('\n🔎 [DISTURBANCE SWEEP] Checking stored disturbances against active routes...');
+    try {
+        const scanned = await scanActiveDisturbancesForRoutes();
+        console.log(`✅ [DISTURBANCE SWEEP] Reviewed ${scanned} active disturbances.`);
+    } catch (error) {
+        console.error('[DISTURBANCE SWEEP] Failed:', error);
     }
 });
 

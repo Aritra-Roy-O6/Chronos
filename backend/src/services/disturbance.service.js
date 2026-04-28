@@ -35,7 +35,12 @@ function routeWithinDistance(originalRoute, disturbanceCoords, thresholdKm = 750
   });
 }
 
-export async function createDisturbance({ location, reason, severity, duration_hours = 24, source = 'PUBLIC' }) {
+function disturbanceAlreadyProcessed(route, disturbanceId) {
+  const processed = route.processed_disturbance_ids || [];
+  return processed.includes(disturbanceId);
+}
+
+export async function createDisturbance({ location, reason, severity, duration_hours = 24, source = 'PUBLIC', triggerReroute = true }) {
   const coords = await getCoordinates(location) || { lat: 0, lng: 0 };
   const now = new Date();
   const expiresAt = new Date(now.getTime() + duration_hours * 60 * 60 * 1000);
@@ -57,7 +62,9 @@ export async function createDisturbance({ location, reason, severity, duration_h
   const docRef = await db.collection('disturbances').add(disturbance);
   const savedDisturbance = { id: docRef.id, ...disturbance, expiresAt };
 
-  await rerouteAffectedRoutes(savedDisturbance);
+  if (triggerReroute) {
+    await rerouteAffectedRoutes(savedDisturbance);
+  }
   return savedDisturbance;
 }
 
@@ -121,10 +128,31 @@ export async function rerouteAffectedRoutes(disturbance) {
 
   for (const doc of snapshot.docs) {
     const routeDoc = { id: doc.id, ...doc.data() };
+    if (disturbanceAlreadyProcessed(routeDoc, disturbance.id)) {
+      continue;
+    }
+
     if (routeAffectedByDisturbance(routeDoc, disturbance)) {
       console.log(`🔁 [DISTURBANCE] Route ${routeDoc.route_id || routeDoc.id} affected by ${disturbance.location}. Triggering autonomous reroute.`);
-      await db.collection('world_state').doc(routeDoc.id).update({ status: 'PROCESSING', lastDisturbanceAt: FieldValue.serverTimestamp() });
+      await db.collection('world_state').doc(routeDoc.id).update({
+        status: 'PROCESSING',
+        lastDisturbanceAt: FieldValue.serverTimestamp(),
+        processed_disturbance_ids: FieldValue.arrayUnion(disturbance.id)
+      });
       await runReflexionLoop(routeDoc, routeDoc.id, { autoExecute: true, disturbance });
     }
   }
+}
+
+export async function scanActiveDisturbancesForRoutes() {
+  const activeDisturbances = await getActiveDisturbances(100);
+  if (!activeDisturbances.length) {
+    return 0;
+  }
+
+  for (const disturbance of activeDisturbances) {
+    await rerouteAffectedRoutes(disturbance);
+  }
+
+  return activeDisturbances.length;
 }

@@ -31,7 +31,7 @@ export default function NewShipment() {
       }
 
       await response.json();
-      navigate('/');
+      navigate('/command');
     } catch (err) {
       console.error(err);
       setLoading(false);

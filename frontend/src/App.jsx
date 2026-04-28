@@ -1,27 +1,67 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import CommandCenter from './pages/CommandCenter';
 import ReportForm from './pages/ReportForm';
 import TrackingPage from './pages/TrackingPage';
-import NewShipment from './pages/NewShipment'; // 🌟 NEW: Import the Shipment Component
+import NewShipment from './pages/NewShipment';
+import LandingPage from './pages/LandingPage';
+
+const LAST_ROUTE_COOKIE = 'chronos_last_route';
+const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
+
+function readCookie(name) {
+  const prefix = `${name}=`;
+  return document.cookie
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(prefix))
+    ?.slice(prefix.length) || '';
+}
+
+function writeCookie(name, value) {
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
+}
+
+function RoutePersistence() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navigationType = useNavigationType();
+  const hasRestoredRef = useRef(false);
+
+  useEffect(() => {
+    if (hasRestoredRef.current) return;
+    hasRestoredRef.current = true;
+
+    const savedRoute = decodeURIComponent(readCookie(LAST_ROUTE_COOKIE) || '');
+    const isAtLanding = location.pathname === '/';
+    const isReloadLikeEntry = navigationType === 'POP';
+
+    if (isAtLanding && isReloadLikeEntry && savedRoute && savedRoute !== '/') {
+      navigate(savedRoute, { replace: true });
+    }
+  }, [location.pathname, navigate, navigationType]);
+
+  useEffect(() => {
+    const currentPath = `${location.pathname}${location.search}${location.hash}`;
+    if (location.pathname !== '/') {
+      writeCookie(LAST_ROUTE_COOKIE, currentPath);
+    }
+  }, [location.hash, location.pathname, location.search]);
+
+  return null;
+}
 
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="w-screen h-screen overflow-hidden bg-black text-white font-sans">
-        <Routes>
-          {/* The Desktop 3D Dashboard */}
-          <Route path="/" element={<CommandCenter />} />
-          
-          {/* 🌟 NEW: The Autonomous User Shipment Lifecycle Form */}
-          <Route path="/create" element={<NewShipment />} />
-          
-          {/* The Mobile Public Ingestion Form */}
-          <Route path="/report" element={<ReportForm />} />
-          
-          {/* The Live Status Tracker */}
-          <Route path="/track/:id" element={<TrackingPage />} />
-        </Routes>
-      </div>
+      <RoutePersistence />
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/command" element={<CommandCenter />} />
+        <Route path="/create" element={<NewShipment />} />
+        <Route path="/report" element={<ReportForm />} />
+        <Route path="/track/:id" element={<TrackingPage />} />
+      </Routes>
     </BrowserRouter>
   );
 }

@@ -1,12 +1,9 @@
-import { GoogleGenAI, Type } from '@google/genai';
-import dotenv from 'dotenv';
+import { Type } from '@google/genai';
 import { createDisturbance } from './disturbance.service.js';
 import { getActiveDisturbances, routeAffectedByDisturbance } from './disturbance.service.js';
 import { runReflexionLoop } from './orchestrator.service.js';
 import { db, FieldValue } from '../config/firebase.js';
-
-dotenv.config();
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+import { getAI } from './ai.service.js';
 
 // The schema for what the Watchman is looking for
 const threatSchema = {
@@ -34,6 +31,7 @@ export async function scanShipmentForThreats(shipmentData, shipmentId) {
     `;
 
     try {
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,

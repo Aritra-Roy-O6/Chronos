@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import CommandCenter from './pages/CommandCenter';
 import ReportForm from './pages/ReportForm';
 import TrackingPage from './pages/TrackingPage';
@@ -25,7 +25,6 @@ function writeCookie(name, value) {
 function RoutePersistence() {
   const location = useLocation();
   const navigate = useNavigate();
-  const navigationType = useNavigationType();
   const hasRestoredRef = useRef(false);
 
   useEffect(() => {
@@ -34,12 +33,13 @@ function RoutePersistence() {
 
     const savedRoute = decodeURIComponent(readCookie(LAST_ROUTE_COOKIE) || '');
     const isAtLanding = location.pathname === '/';
-    const isReloadLikeEntry = navigationType === 'POP';
+    const navigationEntry = window.performance?.getEntriesByType?.('navigation')?.[0];
+    const isReload = navigationEntry?.type === 'reload';
 
-    if (isAtLanding && isReloadLikeEntry && savedRoute && savedRoute !== '/') {
+    if (isAtLanding && isReload && savedRoute && savedRoute !== '/') {
       navigate(savedRoute, { replace: true });
     }
-  }, [location.pathname, navigate, navigationType]);
+  }, [location.pathname, navigate]);
 
   useEffect(() => {
     const currentPath = `${location.pathname}${location.search}${location.hash}`;

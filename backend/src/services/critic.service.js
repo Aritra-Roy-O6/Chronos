@@ -1,8 +1,5 @@
-import { GoogleGenAI, Type } from '@google/genai';
-import dotenv from 'dotenv';
-
-dotenv.config();
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+import { Type } from '@google/genai';
+import { getAI } from './ai.service.js';
 
 // The strict schema for the Critic's grading rubric
 const criticSchema = {
@@ -33,6 +30,7 @@ export async function evaluateRoutes(proposedRoutes, worldState) {
     Look for unrealistic transit times, exorbitant costs, or massive carbon emissions. Score them from 0.0 to 1.0.`;
 
     try {
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             // We use Flash for rapid auditing
             model: 'gemini-2.5-flash',

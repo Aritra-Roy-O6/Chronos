@@ -1,8 +1,5 @@
-import { GoogleGenAI, Type } from '@google/genai';
-import dotenv from 'dotenv';
-
-dotenv.config();
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+import { Type } from '@google/genai';
+import { getAI } from './ai.service.js';
 
 // The strict schema for 3 alternative routes
 const plannerSchema = {
@@ -44,6 +41,7 @@ export async function generateRoutes(worldState, previousFeedback = null) {
     }
 
     try {
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             // We use Pro here because routing requires complex logistical reasoning
             model: 'gemini-2.5-flash', 

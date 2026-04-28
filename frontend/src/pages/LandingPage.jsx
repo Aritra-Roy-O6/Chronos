@@ -1,5 +1,21 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import './LandingPage.css';
+
+const API_KEY_COOKIE = 'chronos_gemini_api_key';
+
+function readCookie(name) {
+  const prefix = `${name}=`;
+  return document.cookie
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(prefix))
+    ?.slice(prefix.length) || '';
+}
+
+function writeCookie(name, value) {
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+}
 
 const capabilities = [
   {
@@ -23,6 +39,42 @@ const metrics = [
 ];
 
 export default function LandingPage() {
+  const [apiKey, setApiKey] = useState(() => decodeURIComponent(readCookie(API_KEY_COOKIE) || ''));
+  const [status, setStatus] = useState({ type: '', message: '' });
+  const [saving, setSaving] = useState(false);
+
+  async function handleSaveApiKey(event) {
+    event.preventDefault();
+    setSaving(true);
+    setStatus({ type: '', message: '' });
+
+    try {
+      const trimmed = apiKey.trim();
+      if (!trimmed) {
+        throw new Error('Enter a Gemini API key before saving.');
+      }
+
+      writeCookie(API_KEY_COOKIE, trimmed);
+
+      const response = await fetch('http://localhost:3000/api/config/gemini-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: trimmed })
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Failed to update API key.');
+      }
+
+      setStatus({ type: 'success', message: 'Gemini API key saved. New backend LLM calls will use it immediately.' });
+    } catch (error) {
+      setStatus({ type: 'error', message: error.message || 'Failed to save API key.' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <main className="landing-page">
       <section className="landing-hero">
@@ -103,6 +155,44 @@ export default function LandingPage() {
                 <p>{capability.body}</p>
               </article>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="landing-section">
+        <div className="landing-shell">
+          <div className="landing-api-card">
+            <div className="landing-api-copy">
+              <p className="landing-eyebrow">Runtime LLM Access</p>
+              <h2>Update the Gemini key without touching deployment config.</h2>
+              <p>
+                Save a fresh Gemini API key here when the old one expires. CHRONOS stores it locally in a cookie for
+                convenience and syncs it to backend runtime config so new planning, critic, watchman, and priority calls use it.
+              </p>
+            </div>
+
+            <form className="landing-api-form" onSubmit={handleSaveApiKey}>
+              <label className="landing-api-label" htmlFor="gemini-api-key">
+                Gemini API Key
+              </label>
+              <input
+                id="gemini-api-key"
+                type="password"
+                autoComplete="off"
+                placeholder="Paste Gemini API key"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                className="landing-api-input"
+              />
+              <button type="submit" disabled={saving} className="landing-button landing-button-primary landing-api-button">
+                {saving ? 'Saving...' : 'Save API Key'}
+              </button>
+              {status.message && (
+                <p className={`landing-api-status ${status.type === 'error' ? 'landing-api-status-error' : 'landing-api-status-success'}`}>
+                  {status.message}
+                </p>
+              )}
+            </form>
           </div>
         </div>
       </section>

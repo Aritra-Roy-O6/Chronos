@@ -11,6 +11,7 @@ import { calculatePriority } from './services/priority.service.js';
 import { getCoordinates } from './services/geocoder.service.js';
 import { createDisturbance, cleanExpiredDisturbances, scanActiveDisturbancesForRoutes } from './services/disturbance.service.js';
 import { scanShipmentForThreats } from './services/watchman.service.js';
+import { storeGeminiApiKey } from './services/ai.service.js';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,6 +20,18 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+app.post('/api/config/gemini-key', async (req, res) => {
+    const { apiKey } = req.body;
+
+    try {
+        await storeGeminiApiKey(apiKey);
+        res.status(200).json({ success: true, message: 'Gemini API key updated successfully.' });
+    } catch (error) {
+        console.error('[CONFIG] Failed to update Gemini key:', error);
+        res.status(400).json({ error: error.message || 'Failed to update Gemini key.' });
+    }
+});
 
 // ==========================================
 // 1. PHASE 2: REAL-TIME FIRESTORE LISTENER

@@ -1,8 +1,5 @@
-import { GoogleGenAI, Type } from '@google/genai';
-import dotenv from 'dotenv';
-
-dotenv.config();
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+import { Type } from '@google/genai';
+import { getAI } from './ai.service.js';
 
 const prioritySchema = {
     type: Type.OBJECT,
@@ -19,6 +16,7 @@ const prioritySchema = {
 export async function calculatePriority(worldState) {
     console.log(`⚖️ [PRIORITY SCORER] Analyzing impact & geocoding for ${worldState.location}...`);
     try {
+        const ai = await getAI();
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: `Analyze this supply chain disruption, score its urgency (1-10), and provide the exact GPS coordinates (lat, lng) for the location: ${JSON.stringify(worldState)}`,

@@ -7,18 +7,21 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const prioritySchema = {
     type: Type.OBJECT,
     properties: {
-        priority_score: { type: Type.NUMBER, description: "Integer from 1 to 10. 10 is global catastrophic failure." },
-        priority_reason: { type: Type.STRING, description: "One sentence explaining the score based on cargo volume and route criticality." }
+        priority_score: { type: Type.NUMBER, description: "Integer from 1 to 10." },
+        priority_reason: { type: Type.STRING, description: "One sentence explaining the score." },
+        // 🌟 NEW: The AI Geocoder
+        lat: { type: Type.NUMBER, description: "The exact geographical latitude of the location." },
+        lng: { type: Type.NUMBER, description: "The exact geographical longitude of the location." }
     },
-    required: ["priority_score", "priority_reason"]
+    required: ["priority_score", "priority_reason", "lat", "lng"]
 };
 
 export async function calculatePriority(worldState) {
-    console.log(`⚖️ [PRIORITY SCORER] Analyzing impact for ${worldState.location}...`);
+    console.log(`⚖️ [PRIORITY SCORER] Analyzing impact & geocoding for ${worldState.location}...`);
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: `Analyze this supply chain disruption and score its global urgency from 1 to 10: ${JSON.stringify(worldState)}`,
+            contents: `Analyze this supply chain disruption, score its urgency (1-10), and provide the exact GPS coordinates (lat, lng) for the location: ${JSON.stringify(worldState)}`,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: prioritySchema,

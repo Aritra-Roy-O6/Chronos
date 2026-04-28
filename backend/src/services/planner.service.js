@@ -35,7 +35,9 @@ const plannerSchema = {
 };
 
 export async function generateRoutes(worldState, previousFeedback = null) {
-    let prompt = `You are the CHRONOS Chief Planner. A disruption occurred: ${JSON.stringify(worldState)}. Generate 3 alternative routes.`;
+    let prompt = `You are the CHRONOS Chief Planner. A disruption occurred: ${JSON.stringify(worldState)}.
+    You MUST consider known_reports from the database as hard constraints when generating routes, and avoid all reported hotspots.
+    Generate 3 alternative routes.`;
     
     if (previousFeedback) {
         prompt += `\n\nCRITICAL FEEDBACK ON PREVIOUS ATTEMPT: The critic rejected your last plan for these reasons: ${JSON.stringify(previousFeedback)}. Fix these fatal flaws in your new routes.`;

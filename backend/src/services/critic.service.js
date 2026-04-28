@@ -29,7 +29,8 @@ const criticSchema = {
 export async function evaluateRoutes(proposedRoutes, worldState) {
     const prompt = `You are the CHRONOS Critic. The Planner suggested these routes: ${JSON.stringify(proposedRoutes)} to bypass this disruption: ${JSON.stringify(worldState)}. 
     
-    Audit them ruthlessly. Look for unrealistic transit times, exorbitant costs, or massive carbon emissions. Score them from 0.0 to 1.0.`;
+    Audit them ruthlessly. Reject any route that crosses or approaches active known_reports from the database.
+    Look for unrealistic transit times, exorbitant costs, or massive carbon emissions. Score them from 0.0 to 1.0.`;
 
     try {
         const response = await ai.models.generateContent({

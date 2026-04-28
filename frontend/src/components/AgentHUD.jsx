@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Terminal, BrainCircuit, Activity, ShieldCheck } from 'lucide-react';
+import { Terminal, BrainCircuit, Activity, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 export default function AgentHUD({ activeStateId }) {
   const [logs, setLogs] = useState([]);
@@ -23,8 +23,15 @@ export default function AgentHUD({ activeStateId }) {
         newLogs.push({ id: doc.id, ...doc.data() });
       });
       
-      // Sort them locally by iteration number instead!
-      newLogs.sort((a, b) => a.iteration - b.iteration);
+      // Sort locally so disturbance marker appears before planner/critic rounds.
+      newLogs.sort((a, b) => {
+        const iterA = Number.isFinite(a.iteration) ? a.iteration : 9999;
+        const iterB = Number.isFinite(b.iteration) ? b.iteration : 9999;
+        if (iterA !== iterB) return iterA - iterB;
+        const timeA = a.timestamp?.toMillis?.() || 0;
+        const timeB = b.timestamp?.toMillis?.() || 0;
+        return timeA - timeB;
+      });
       
       setLogs(newLogs);
     });
@@ -47,7 +54,7 @@ export default function AgentHUD({ activeStateId }) {
     >
       <div className="flex items-center gap-2 mb-4 border-b border-white/10 pb-2">
         <Terminal className="w-5 h-5 text-emerald-400" />
-        <h3 className="font-mono text-sm font-semibold tracking-widest text-white/80">ORCHESTRATOR LOGS</h3>
+        <h3 className="font-mono text-sm font-semibold tracking-widest text-white/80">ORCHESTRATOR ROUTES</h3>
       </div>
 
       <div className="flex-1 overflow-y-auto font-mono text-xs space-y-3 pr-2 custom-scrollbar">
@@ -65,6 +72,21 @@ export default function AgentHUD({ activeStateId }) {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-1"
             >
+              {log.type === 'DISTURBANCE_FOUND' && (
+                <div className="text-red-300 flex items-start gap-2 mt-1 bg-red-500/10 p-2 rounded border border-red-500/30">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-white">Disturbance Found:</strong>{' '}
+                    <span className="text-white/90">{log.disturbance?.reason || 'Unknown reason'}</span>
+                    <div className="text-white/60 mt-1">
+                      {log.disturbance?.location || 'Unknown location'} · {log.disturbance?.source || 'UNKNOWN'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {log.type !== 'DISTURBANCE_FOUND' && (
+                <>
               <div className="text-blue-400 flex items-start gap-2">
                 <BrainCircuit className="w-3 h-3 mt-0.5 shrink-0" />
                 <span><strong className="text-white/80">PLANNER:</strong> Generated {log.routes?.length || 0} candidate routes.</span>
@@ -92,6 +114,8 @@ export default function AgentHUD({ activeStateId }) {
                   )}
                 </div>
               ))}
+                </>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>

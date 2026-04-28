@@ -3,11 +3,15 @@ import cron from 'node-cron';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 import { db, FieldValue } from './config/firebase.js'; 
-import { runReflexionLoop } from './services/orchestrator.service.js';
-import { executePlan } from './services/executor.service.js';
+import { runReflexionLoop, initializeRoutePlanningForShipment } from './services/orchestrator.service.js';
 import cors from 'cors';
 import { calculatePriority } from './services/priority.service.js';
+import { getCoordinates } from './services/geocoder.service.js';
+import { createDisturbance, cleanExpiredDisturbances } from './services/disturbance.service.js';
+import { scanShipmentForThreats } from './services/watchman.service.js';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -36,7 +40,14 @@ db.collection('world_state')
                   await db.collection('world_state').doc(docId).update({ status: 'PROCESSING' });
                   
                   // Kick off the AI debate!
-                  runReflexionLoop(stateData, docId).catch(console.error);
+                  runReflexionLoop(stateData, docId, {
+                      disturbance: {
+                          location: stateData.location,
+                          reason: stateData.reason || stateData.headline || 'Disruption detected',
+                          source: stateData.source || 'WORLD_STATE',
+                          severity: stateData.disruption_level
+                      }
+                  }).catch(console.error);
               }
           }
       });
@@ -71,36 +82,141 @@ app.post('/api/demo/trigger', async (req, res) => {
     }
 });
 
-// 3. The Approval Endpoint (Now with Human-In-The-Loop Overwrites)
-app.post('/api/plan/approve', async (req, res) => {
-    const { worldStateId, overwriteData } = req.body;
-    console.log(`\n👨‍💼 [HUMAN] Plan for ${worldStateId} approved.`);
+// 3. THE PUBLIC INGESTION ENDPOINT (Mobile Form)
+app.post('/api/report', async (req, res) => {
+    const { location, reason, disruption_level, duration_hours } = req.body;
+    console.log(`\n📱 [PUBLIC SENTINEL] Disruption report received: ${location}`);
     
     try {
-        const doc = await db.collection('world_state').doc(worldStateId).get();
-        let planData = doc.data().validated_plan;
-
-        // 🌟 NEW: Check if the human changed the AI's math or route
-        if (overwriteData && overwriteData.isEdited) {
-            console.log(`[SECURITY] Human overwrite detected! Logging audit trail...`);
-            
-            await db.collection('agent_logs').add({
-                worldStateId,
-                iteration: 99,
-                type: 'HUMAN_OVERWRITE',
-                diff: `Human override applied. Reason: ${overwriteData.editReason}`,
-                timestamp: FieldValue.serverTimestamp()
-            });
-
-            // Apply modifications
-            if (overwriteData.estimated_days) planData.route.estimated_days = overwriteData.estimated_days;
-            if (overwriteData.route_path) planData.route.path_description = overwriteData.route_path; // ✅ Added Route Editing
+        if (!location || !reason) {
+            return res.status(400).json({ error: "location and reason are required" });
         }
 
-        await executePlan(planData, worldStateId);
-        res.status(200).json({ message: "Plan executed successfully" });
+        const normalizedSeverity = Math.min(1, Math.max(0.1, parseFloat(disruption_level) || 0.5));
+        const normalizedDuration = Math.min(168, Math.max(1, parseFloat(duration_hours) || 24));
+
+        await createDisturbance({
+            location,
+            reason,
+            severity: normalizedSeverity,
+            duration_hours: normalizedDuration,
+            source: 'PUBLIC_SENTINEL'
+        });
+        res.status(200).json({ success: true, message: "Disruption report ingested. CHRONOS will reroute affected shipments automatically." });
     } catch (error) {
+        console.error("[PUBLIC SENTINEL] Report ingestion failed:", error);
         res.status(500).json({ error: "Execution failed" });
+    }
+});
+
+// ==========================================
+// 5. USER SHIPMENT INGESTION
+// ==========================================
+app.post('/api/shipment', async (req, res) => {
+    // Destructure the perfectly formatted fields from the React form
+    const { origin, destination, stops, cargo, priority, notes } = req.body;
+    console.log(`\n📦 [LOGISTICS] New structured shipment: ${origin} to ${destination}`);
+
+    try {
+        const stopsArray = stops ? stops.split(',').map(s => s.trim()).filter(s => s) : [];
+        const allRoutePoints = [origin, ...stopsArray, destination];
+
+        // 1. Geocode every route node so the original path can render on the globe
+        const pointCoordinates = await Promise.all(
+            allRoutePoints.map(async (place) => {
+                const coord = await getCoordinates(place);
+                return {
+                    lat: coord?.lat || 0,
+                    lng: coord?.lng || 0,
+                    label: place
+                };
+            })
+        );
+
+        const tracking_id = crypto.randomUUID().slice(0, 6).toUpperCase();
+        const payload = {
+            tracking_id,
+            origin,
+            destination,
+            stops: stopsArray,
+            cargo,
+            priority,
+            notes,
+            lat: pointCoordinates[0]?.lat || 0,
+            lng: pointCoordinates[0]?.lng || 0,
+            original_route: pointCoordinates,
+            type: 'USER_SHIPMENT',
+            status: 'SAFE',
+            isActive: true,
+            createdAt: FieldValue.serverTimestamp()
+        };
+
+        const docRef = await db.collection('world_state').add(payload);
+        initializeRoutePlanningForShipment(docRef.id).catch((error) => {
+            console.error('[ROUTER] Initial route planning failed:', error);
+        });
+
+        res.status(200).json({ success: true, id: docRef.id, tracking_id });
+    } catch (error) {
+        console.error("[ERROR] Failed to create shipment:", error);
+        res.status(500).json({ error: "Failed to create shipment" });
+    }
+});
+
+// ==========================================
+// 5.5. ROUTE DELETE ENDPOINT
+// ==========================================
+app.post('/api/route/delete', async (req, res) => {
+    const { worldStateId } = req.body;
+    console.log(`\n🗑️ [ROUTE] Delete requested for ${worldStateId}`);
+
+    try {
+        await db.collection('world_state').doc(worldStateId).update({
+            isActive: false,
+            status: 'DELETED',
+            deletedAt: FieldValue.serverTimestamp()
+        });
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('[ERROR] Failed to delete route:', error);
+        res.status(500).json({ error: 'Route deletion failed' });
+    }
+});
+
+// ==========================================
+// 6. THE AUTONOMOUS HEARTBEAT (Cron Jobs)
+// ==========================================
+// Runs every 2 minutes to scan the web for active shipments
+cron.schedule('*/2 * * * *', async () => {
+    console.log('\n⏱️ [HEARTBEAT] Waking up Watchman to scan active shipments...');
+    
+    try {
+        const snapshot = await db.collection('world_state')
+            .where('type', '==', 'USER_SHIPMENT')
+            .where('isActive', '==', true)
+            .get();
+
+        if (snapshot.empty) {
+            console.log('💤 No active shipments to monitor.');
+            return;
+        }
+
+        snapshot.forEach(doc => {
+            scanShipmentForThreats(doc.data(), doc.id);
+        });
+    } catch (error) {
+        console.error("[HEARTBEAT] Failed:", error);
+    }
+});
+
+// Every 10 minutes, expire disturbances so they are no longer considered by rerouting logic.
+cron.schedule('*/10 * * * *', async () => {
+    console.log('\n🧹 [HOUSEKEEPING] Expiring old disturbances from database...');
+    try {
+        const count = await cleanExpiredDisturbances();
+        console.log(`✅ [HOUSEKEEPING] Removed ${count} expired disturbances.`);
+    } catch (error) {
+        console.error("[HOUSEKEEPING] Failed:", error);
     }
 });
 

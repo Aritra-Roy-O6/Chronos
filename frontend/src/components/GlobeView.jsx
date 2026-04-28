@@ -3,12 +3,6 @@ import Globe from 'react-globe.gl';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 
-const PORT_COORDS = {
-  "Port of Rotterdam, Netherlands": { lat: 51.9225, lng: 4.4792 },
-  "Singapore": { lat: 1.290270, lng: 103.851959 },
-  "Los Angeles": { lat: 34.0522, lng: -118.2437 }
-};
-
 export default function GlobeView({ onStateChange, historicalFocus }) {
   const globeEl = useRef();
   const [disruptions, setDisruptions] = useState([]);
@@ -19,58 +13,73 @@ export default function GlobeView({ onStateChange, historicalFocus }) {
     const q = query(collection(db, 'world_state'), where('isActive', '==', true));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const activeDisruptions = [];
-      const activeArcs = [];
-      let latestDoc = null;
-      let latestTime = 0;
+      let activeEvents = [];
 
       snapshot.forEach((doc) => {
         const data = doc.data();
-        const coords = PORT_COORDS[data.location] || { lat: 0, lng: 0 };
-        
-        const disruptionData = {
-          id: doc.id,
-          lat: coords.lat,
-          lng: coords.lng,
-          color: data.disruption_level > 0.8 ? '#ef4444' : '#f59e0b', 
-          label: data.location,
-          isHistorical: false,
-          ...data
-        };
-
-        activeDisruptions.push(disruptionData);
-
-        const docTime = data.createdAt?.toMillis() || Date.now();
-        if (docTime >= latestTime) {
-            latestTime = docTime;
-            latestDoc = disruptionData;
-        }
-
-        // 🌟 NEW: Convert AI waypoints into connected 3D arcs
-        if (data.validated_plan && data.validated_plan.route.waypoints && data.validated_plan.route.waypoints.length > 1) {
-            const wps = data.validated_plan.route.waypoints;
-            for (let i = 0; i < wps.length - 1; i++) {
-                // Check if the AI actually returned valid numbers
-                if (wps[i].lat != null && wps[i+1].lat != null) {
-                    activeArcs.push({
-                        startLat: wps[i].lat,
-                        startLng: wps[i].lng,
-                        endLat: wps[i+1].lat,
-                        endLng: wps[i+1].lng,
-                        color: ['#10b981', '#3b82f6'], // Glowing Green to Blue
-                        name: `${data.validated_plan.route.route_id}-seg-${i}`
-                    });
-                }
-            }
-        }
+        activeEvents.push({ id: doc.id, ...data });
       });
 
-      setDisruptions(activeDisruptions);
-      setPaths(activeArcs); // We store arcs in the paths state variable
-      onStateChange(latestDoc ? latestDoc : null);
+      // 🌟 THE FIX: Sort by Priority (Highest first), then by Date (Oldest first)
+      activeEvents.sort((a, b) => {
+          if (b.priority_score !== a.priority_score) {
+              return (b.priority_score || 0) - (a.priority_score || 0);
+          }
+          const timeA = a.createdAt?.toMillis() || 0;
+          const timeB = b.createdAt?.toMillis() || 0;
+          return timeA - timeB;
+      });
 
-      if (latestDoc && globeEl.current && !historicalFocus) {
-        globeEl.current.pointOfView({ lat: latestDoc.lat, lng: latestDoc.lng, altitude: 1.5 }, 2000); 
+      const urgentDoc = activeEvents.length > 0 ? activeEvents[0] : null;
+
+      if (urgentDoc) {
+          const locationLabel = urgentDoc.location || (urgentDoc.origin && urgentDoc.destination ? `${urgentDoc.origin} → ${urgentDoc.destination}` : 'Active Event');
+          const isThreat = urgentDoc.disruption_level != null && urgentDoc.disruption_level > 0.6;
+          const disruptionColor = urgentDoc.status === 'SAFE'
+              ? '#10b981'
+              : urgentDoc.status === 'PLAN_READY'
+              ? '#3b82f6'
+              : isThreat
+              ? '#f59e0b'
+              : '#ef4444';
+
+          const disruptionData = {
+              ...urgentDoc,
+              lat: urgentDoc.lat || 0,
+              lng: urgentDoc.lng || 0,
+              color: disruptionColor,
+              label: locationLabel,
+              isHistorical: false
+          };
+          
+          setDisruptions([disruptionData]);
+          onStateChange(disruptionData);
+
+          const activeArcs = [];
+          if (urgentDoc.validated_plan && urgentDoc.validated_plan.route.waypoints) {
+              const wps = urgentDoc.validated_plan.route.waypoints;
+              for (let i = 0; i < wps.length - 1; i++) {
+                  if (wps[i].lat != null && wps[i+1].lat != null) {
+                      activeArcs.push({
+                          startLat: wps[i].lat,
+                          startLng: wps[i].lng,
+                          endLat: wps[i+1].lat,
+                          endLng: wps[i+1].lng,
+                          color: ['#10b981', '#3b82f6'],
+                          name: `seg-${i}`
+                      });
+                  }
+              }
+          }
+          setPaths(activeArcs);
+
+          if (globeEl.current && !historicalFocus) {
+              globeEl.current.pointOfView({ lat: disruptionData.lat, lng: disruptionData.lng, altitude: 1.5 }, 2000);
+          }
+      } else {
+          setDisruptions([]);
+          setPaths([]);
+          onStateChange(null);
       }
     });
 
@@ -83,18 +92,18 @@ export default function GlobeView({ onStateChange, historicalFocus }) {
   
   useEffect(() => {
     if (historicalFocus && globeEl.current) {
-        const coords = PORT_COORDS[historicalFocus.location] || { lat: 0, lng: 0 };
+        const coords = { lat: historicalFocus.lat || 0, lng: historicalFocus.lng || 0 };
         
         setHistoryPoint({
             id: 'history-' + historicalFocus.id,
             lat: coords.lat,
             lng: coords.lng,
-            color: '#9ca3af', 
-            label: `[RESOLVED] ${historicalFocus.location}`,
+            color: '#3b82f6',
+            label: `[SELECTED ROUTE] ${historicalFocus.origin || historicalFocus.location}`,
             isHistorical: true
         });
 
-        // 🌟 NEW: Draw Historical waypoints as Gray Arcs
+        // Render only the selected route path (no original/past path overlays)
         const hArcs = [];
         if (historicalFocus.validated_plan && historicalFocus.validated_plan.route.waypoints && historicalFocus.validated_plan.route.waypoints.length > 1) {
              const wps = historicalFocus.validated_plan.route.waypoints;
@@ -105,7 +114,7 @@ export default function GlobeView({ onStateChange, historicalFocus }) {
                         startLng: wps[i].lng,
                         endLat: wps[i+1].lat,
                         endLng: wps[i+1].lng,
-                        color: ['#6b7280', '#4b5563'], // Gray fade
+                        color: ['#10b981', '#3b82f6'],
                         name: `hist-seg-${i}`
                     });
                  }
@@ -120,7 +129,7 @@ export default function GlobeView({ onStateChange, historicalFocus }) {
     }
   }, [historicalFocus]);
 
-  const allPoints = historyPoint ? [...disruptions, historyPoint] : disruptions;
+  const allPoints = historicalFocus ? (historyPoint ? [historyPoint] : []) : disruptions;
   const allRenderedArcs = historicalFocus ? historyArcs : paths;
 
   return (

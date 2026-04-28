@@ -20,13 +20,15 @@ export async function executePlan(planData, worldStateId) {
     const alert = await sendCarrierAlert(planData.route.route_id, planData.route.path_description);
     const contract = await draftContract(planData.route);
 
-    // Update Firestore to show actions are complete
+    // Update Firestore to show the reroute was applied, but keep the shipment active for future monitoring.
     await db.collection('world_state').doc(worldStateId).update({
+        status: 'ROUTE_UPDATED',
         execution_status: 'EXECUTED',
-        isActive: false,
+        isActive: true,
         contract_draft: contract,
         alert_sent: true,
-        executedAt: FieldValue.serverTimestamp()
+        executedAt: FieldValue.serverTimestamp(),
+        last_execution_at: FieldValue.serverTimestamp()
     });
 
     console.log(`✅ [EXECUTOR] Actions complete. Carrier alerted and Contract drafted.`);
